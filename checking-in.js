@@ -3,20 +3,38 @@
  * auto.waitFor()则会在在无障碍服务启动后继续运行
  * https://docs.hamibot.com/reference/widgetsBasedAutomation
  */
-const { chanUrl, barkUrl, stepInterval, quickChecking, checkingTime } =
-  hamibot.env
+const {
+  pushPlusToken,
+  chanSendKey,
+  barkUrl,
+  stepInterval,
+  isShowConsoleInPhone,
+  quickChecking,
+  checkingTime
+} = hamibot.env
 auto.waitFor()
+
+//日志集
+let logMsgList = [];
 
 // 唤醒设备并解锁
 // home()
 device.wakeUp()
-let { height, width } = device
+let {
+  height,
+  width
+} = device
 let x = width / 2
 let y1 = (height / 3) * 2
 let y2 = height / 3
 swipe(x, y1, x + 5, y2, 500)
 
-toastLog('拉起企业微信,准备打卡。。。')
+if (isShowConsoleInPhone == 1 || isShowConsoleInPhone == "1") {
+  myLog("开启移动端控制台")
+  console.show();
+}
+
+myLog('打开企业微信')
 app.launchApp('企业微信')
 
 let quick = false
@@ -39,33 +57,51 @@ if (quickChecking == 1 || quickChecking == '1') {
 
 if (quick) {
   check()
-} else {
-  // 切换到 工作台
-  stepClick('工作台')
-  // 切换到打卡页
-  stepClick('打卡')
+}
+else {
+  let step = text('微信登录').findOne(1000)
+  if (step) {
+    myLog('未登录企业微信，请登录');
+  }
+  else {
+    // 切换到 工作台
+    stepClick('工作台')
+    // 切换到打卡页
+    stepClick('打卡')
+  }
+
+  myLog("开始推送日志");
+  pushLogsToRemotes();
+  home();
+
+  hamibot.exit()
 }
 
 function stepClick(matchStr) {
-  console.log('正在匹配 --- ', matchStr)
+  myLog('【正在匹配】' + matchStr)
   sleep(stepInterval)
   let step = text(matchStr).findOne(1000)
   if (step) {
-    console.log('匹配成功')
+    myLog('匹配成功')
     // let stepLeft = step.bounds().left + 15
     // let stepTop = step.bounds().top + 10
     // console.log(stepLeft, stepTop)
     if (matchStr !== '打卡') {
       // click(stepLeft, stepTop)
       while (!click(matchStr));
-    } else {
+    }
+    else {
       while (!click('打卡'));
       sleep(stepInterval)
       signAction()
     }
-  } else if (matchStr == '打卡') {
-    console.log('滑动屏幕再次匹配')
-    let { height, width } = device
+  }
+  else if (matchStr == '打卡') {
+    myLog('滑动屏幕再次匹配')
+    let {
+      height,
+      width
+    } = device
     let x = width / 2
     let y1 = (height / 3) * 2
     let y2 = height / 3
@@ -74,8 +110,9 @@ function stepClick(matchStr) {
       sleep(stepInterval / 2)
       stepClick(matchStr)
     }
-  } else {
-    console.log('匹配失败,后退再次匹配')
+  }
+  else {
+    myLog('匹配失败,后退再次匹配')
     back()
     sleep(stepInterval)
     stepClick(matchStr)
@@ -84,7 +121,7 @@ function stepClick(matchStr) {
 
 // 打卡
 function signAction() {
-  toastLog('signAction 开始执行')
+  myLog('signAction 开始执行')
   let signIn = text('上班打卡').findOne(1000)
   let signOut = text('下班打卡').findOne(1000)
   if (signIn) {
@@ -92,13 +129,15 @@ function signAction() {
     let stepTop = signIn.bounds().top + 10
     click(stepLeft, stepTop)
     check()
-  } else if (signOut) {
+  }
+  else if (signOut) {
     let stepLeft = signOut.bounds().left + 10
     let stepTop = signOut.bounds().top + 10
     click(stepLeft, stepTop)
     check()
-  } else {
-    toastLog('打卡未完成,正在检查打卡状态')
+  }
+  else {
+    myLog('打卡未完成，正在检查打卡状态')
     check()
   }
 }
@@ -106,7 +145,6 @@ function signAction() {
 // 判断打卡是否完成
 function check() {
   sleep(stepInterval)
-  let msg = ''
   let flagIn =
     textEndsWith('上班·正常').findOne(1000) ||
     textStartsWith('上班自动打卡·正常').findOne(1000)
@@ -119,64 +157,93 @@ function check() {
     textEndsWith('确认打卡').findOne(1000)
 
   if (flagIn) {
-    toastLog('打卡完成')
-    msg = '上班打卡成功'
+    myLog('打卡完成')
   } else if (flagIn2) {
-    toastLog('打卡完成')
-    msg = '迟到打卡 完成'
+    myLog('打卡完成')
   } else if (flagOut) {
-    toastLog('打卡完成')
-    msg = '下班打卡成功'
+    myLog('打卡完成')
   } else if (flagInAdvance) {
-    toastLog('已经打过上班卡了!')
-    msg = '已经打过上班卡了!'
+    myLog('已经打过上班卡了!')
   } else {
-    toastLog('打卡失败!')
-    msg = '打卡失败!'
+    myLog('打卡失败!')
   }
+}
+
+// 多端打印日志
+function myLog(msg) {
+  toastLog(msg);//以气泡显示信息几秒，同时也会输出到控制台
+  //console.log(msg);//发送到控制台
+  hamibot.postMessage(msg); //发送到控制台的脚本消息
+
+  logMsgList.push(msg);
+}
+
+// 日志记录Http请求返回内容
+function logHttpResponse(res) {
+  myLog("打印请求结果");
+  myLog("返回状态码：" + res.statusCode);
+  myLog("返回Body：" + res.body.string());
+}
+
+// 远端推送
+function pushLogsToRemotes() {
+  if (logMsgList.length <= 0) return;
+
+  let msg = "";
 
   let dd = new Date()
-  let years = dd.getFullYear()
-  let mouths = dd.getMonth() + 1
-  let days = dd.getDate()
-  let hours = dd.getHours()
-  let minutes = dd.getMinutes()
-  mouths = mouths < 10 ? '0' + mouths : mouths
-  days = days < 10 ? '0' + days : days
-  hours = hours < 10 ? '0' + hours : hours
-  minutes = minutes < 10 ? '0' + minutes : minutes
-  let formatDate =
-    years + '-' + mouths + '-' + days + ' ' + hours + ':' + minutes
+  let formatDate = dateFormat(dd, "yyyy-MM-dd hh:mm");
+  let msgTitle = '企业微信打卡通知(' + formatDate + ')';
 
-  if (chanUrl && chanUrl.trim() !== '') {
-    let url = chanUrl + '?text=' + msg + formatDate
-    http.get(url)
+  logMsgList.forEach(element => {
+    msg = msg + element + '\n\n';
+  });
+
+
+  if (pushPlusToken && pushPlusToken.trim() !== '') {
+    myLog("开始推送到：PushPlus");
+    let pushPlusUrl = 'http://www.pushplus.plus/send'
+    let pushPlusRes = http.post(pushPlusUrl, {
+      token: pushPlusToken,
+      title: msgTitle,
+      content: msg
+    });
+    logHttpResponse(pushPlusRes);
+  }
+
+  if (chanSendKey && chanSendKey.trim() !== '') {
+    myLog("开始推送到：Server酱");
+    let chanUrl = 'https://sctapi.ftqq.com/' + chanSendKey + '.send';
+    let chanRes = http.post(chanUrl, {
+      title: msgTitle,
+      desp: msg
+    })
+    logHttpResponse(chanRes);
   }
 
   if (barkUrl && barkUrl.trim() !== '') {
+    myLog("开始推送到：Bark");
     let url = barkUrl + msg + '/' + formatDate
-    http.get(url)
+    let barkRes = http.get(url)
+    logHttpResponse(barkRes);
   }
-
-  hamibot.postMessage(formatDate + ' ' + msg)
-  hamibot.exit()
 }
 
-// ----------------------------------------
-// 下面是第一版
-// ----------------------------------------
-// sleep(1000)
-// while (!click('工作台'));
-// console.log('切换到工作台')
-
-// sleep(1000)
-// while (!click('打卡'));
-// console.log('切换到打卡')
-
-// sleep(1000)
-// while (!click('班打卡')) sleep(1000)
-// if (text('打卡成功').findOne()) {
-//   toastLog('打卡成功')
-// } else {
-//   toastLog('打卡失败')
-// }
+// 格式化时间
+function dateFormat(date, fmt) {
+  var o = {
+    "M+": date.getMonth() + 1,                 //月份   
+    "d+": date.getDate(),                    //日   
+    "h+": date.getHours(),                   //小时   
+    "m+": date.getMinutes(),                 //分   
+    "s+": date.getSeconds(),                 //秒   
+    "q+": Math.floor((date.getMonth() + 3) / 3), //季度   
+    "S": date.getMilliseconds()             //毫秒   
+  };
+  if (/(y+)/.test(fmt))
+    fmt = fmt.replace(RegExp.$1, (date.getFullYear() + "").substr(4 - RegExp.$1.length));
+  for (var k in o)
+    if (new RegExp("(" + k + ")").test(fmt))
+      fmt = fmt.replace(RegExp.$1, (RegExp.$1.length == 1) ? (o[k]) : (("00" + o[k]).substr(("" + o[k]).length)));
+  return fmt;
+}
