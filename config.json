@@ -3,7 +3,7 @@
     "label": "上班打卡时间",
     "name": "checkingTime",
     "type": "time",
-    "value": "09:30",
+    "value": "09:00",
     "validation": "required"
   },
   {

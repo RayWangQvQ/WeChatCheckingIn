@@ -22,10 +22,10 @@ main();
 
 //预备工作
 function preWork() {
-  //唤醒设备
+  myLog('唤醒设备')
   device.wakeUpIfNeeded()
 
-  //滑动解锁
+  myLog('滑动解锁')
   let {
     height,
     width
@@ -74,9 +74,11 @@ function main() {
     if (currentHour > checkingHour * 1) {
       // 迟到或者下班卡
       quick = false
-    } else if (currentMin <= checkingMin * 1 && quick) {
+    }
+    else if (currentMin <= checkingMin * 1 && quick) {
       quick = true
-    } else {
+    }
+    else {
       // 迟到或者下班卡
       quick = false
     }
@@ -120,7 +122,7 @@ function openWorkbench() {
   let isFind = text(matchStr).findOne(1000)
   if (isFind) {
     myLog('匹配成功')
-    let isClickSuc = tryToClickTimes(matchStr, 5);
+    let isClickSuc = click(matchStr);
     if (isClickSuc) {
       myLog('【进入控制台】成功');
       return true;
@@ -130,7 +132,7 @@ function openWorkbench() {
       return false;
     }
   }
-  else{
+  else {
     myLog('匹配失败，尝试回退')
     back();
     return openWorkbench();
@@ -145,7 +147,7 @@ function openSigninInWorkbench() {
   let isFind = text(matchStr).findOne(1000)
   if (isFind) {
     myLog('匹配成功')
-    let isClickSuc = tryToClickTimes(matchStr, 5);
+    let isClickSuc = click(matchStr);
     if (isClickSuc) {
       myLog('【进入打卡页】成功');
       return true;
@@ -177,61 +179,53 @@ function openSigninInWorkbench() {
 function signAction() {
   myLog('signAction 开始执行')
   let signIn = text('上班打卡').findOne(1000)
-  let signOut = text('下班打卡').findOne(1000)
   if (signIn) {
     let stepLeft = signIn.bounds().left + 10
     let stepTop = signIn.bounds().top + 10
     click(stepLeft, stepTop)
     check()
+    return;
   }
-  else if (signOut) {
+  let signOut = text('下班打卡').findOne(1000)
+  if (signOut) {
     let stepLeft = signOut.bounds().left + 10
     let stepTop = signOut.bounds().top + 10
     click(stepLeft, stepTop)
     check()
+    return;
   }
-  else {
-    myLog('打卡未完成，正在检查打卡状态')
-    check()
-  }
+  myLog('打卡未完成，正在检查打卡状态')
+  check()
 }
 
 // 判断打卡是否完成
 function check() {
   sleep(stepInterval)
-  let flagIn =
-    textEndsWith('上班·正常').findOne(1000) ||
-    textStartsWith('上班自动打卡·正常').findOne(1000)
-  let flagIn2 = textStartsWith('迟到打卡').findOne(1000)
-  let flagOut =
-    textEndsWith('下班·正常').findOne(1000) ||
-    textStartsWith('今日打卡已完成').findOne(1000)
-  let flagInAdvance =
-    textStartsWith('你早退了').findOne(1000) &&
-    textEndsWith('确认打卡').findOne(1000)
+  myLog('-------开始检测打卡页-------')
 
-  if (flagIn) {
-    myLog('打卡完成')
-  } else if (flagIn2) {
-    myLog('打卡完成')
-  } else if (flagOut) {
-    myLog('打卡完成')
-  } else if (flagInAdvance) {
-    myLog('已经打过上班卡了!')
-  } else {
-    myLog('打卡失败!')
+  if (textEndsWith('上班·正常').findOne(1000)) {
+    myLog('【页面显示】上班·正常');
   }
-}
+  if (textStartsWith('上班自动打卡·正常').findOne(1000)) {
+    myLog('【页面显示】上班自动打卡·正常')
+  }
+  if (textStartsWith('迟到打卡').findOne(1000)) {
+    myLog('【页面显示】迟到打卡')
+  }
+  if (textEndsWith('下班·正常').findOne(1000)) {
+    myLog('【页面显示】下班·正常')
+  }
+  if (textStartsWith('今日打卡已完成').findOne(1000)) {
+    myLog('【页面显示】今日打卡已完成')
+  }
+  if (textStartsWith('你早退了').findOne(1000)) {
+    myLog('【页面显示】你早退了')
+  }
+  if (textEndsWith('确认打卡').findOne(1000)) {
+    myLog('【页面显示】确认打卡')
+  }
 
-function tryToClickTimes(text, times) {
-  for (var i = 1; i <= times; i++) {
-    myLog('尝试点击第' + i + '次...');
-    if (click(text)) {
-      return true;
-    }
-    sleep(stepInterval);
-  }
-  return false;
+  myLog('-------检测结束-------')
 }
 
 // 多端打印日志
@@ -261,7 +255,7 @@ function pushLogsToRemotes() {
   let msgTitle = '企业微信打卡通知(' + formatDate + ')';
 
   logMsgList.forEach(element => {
-    msg = msg + element + '\n\n';
+    msg = msg + element + '\n';
   });
 
 
@@ -277,6 +271,7 @@ function pushLogsToRemotes() {
   }
 
   if (chanSendKey && chanSendKey.trim() !== '') {
+    msg=msg.replaceAll('\n','\n\n');//Server酱默认两个才能换行
     myLog("开始推送到：Server酱");
     let chanUrl = 'https://sctapi.ftqq.com/' + chanSendKey + '.send';
     let chanRes = http.post(chanUrl, {
@@ -313,6 +308,7 @@ function dateFormat(date, fmt) {
   return fmt;
 }
 
+//结束流程
 function endAll(isSignInSuccess) {
   myLog("开始推送日志");
   pushLogsToRemotes();
