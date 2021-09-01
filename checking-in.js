@@ -17,105 +17,159 @@ auto.waitFor()
 //日志集
 let logMsgList = [];
 
-// 唤醒设备并解锁
-// home()
-device.wakeUp()
-let {
-  height,
-  width
-} = device
-let x = width / 2
-let y1 = (height / 3) * 2
-let y2 = height / 3
-swipe(x, y1, x + 5, y2, 500)
+preWork();
+main();
 
-if (isShowConsoleInPhone == 1 || isShowConsoleInPhone == "1") {
-  myLog("开启移动端控制台")
-  console.show();
-}
+//预备工作
+function preWork() {
+  //唤醒设备
+  device.wakeUpIfNeeded()
 
-myLog('打开企业微信')
-app.launchApp('企业微信')
+  //滑动解锁
+  let {
+    height,
+    width
+  } = device
+  let x = width / 2
+  let y1 = (height / 3) * 2
+  let y2 = height / 3
+  swipe(x, y1, x + 5, y2, 500)
 
-let quick = false
-if (quickChecking == 1 || quickChecking == '1') {
-  quick = quickChecking * 1 == 1
-  let checkingHour = checkingTime.split(':')[0]
-  let checkingMin = checkingTime.split(':')[1]
-  let currentHour = new Date().getHours()
-  let currentMin = new Date().getMinutes()
-  if (currentHour > checkingHour * 1) {
-    // 迟到或者下班卡
-    quick = false
-  } else if (currentMin <= checkingMin * 1 && quick) {
-    quick = true
-  } else {
-    // 迟到或者下班卡
-    quick = false
+  sleep(stepInterval);
+
+  if (isShowConsoleInPhone == 1 || isShowConsoleInPhone == "1") {
+    myLog("开启移动端控制台")
+    console.show();
   }
 }
 
-if (quick) {
-  check()
-}
-else {
-  let step = text('微信登录').findOne(1000)
-  if (step) {
+function main() {
+  home();
+  sleep(stepInterval);
+
+  myLog('打开企业微信App')
+  let appExist = app.launchApp('企业微信')
+  if (!appExist) {
+    myLog('未安装企业微信App，结束流程');
+    endAll(false);
+    return;
+  }
+  sleep(stepInterval);
+
+  let isLogin = text('微信登录').findOne(1000)
+  if (isLogin) {
     myLog('未登录企业微信，请登录');
+    endAll(false);
+    return;
+  }
+
+  let quick = false
+  if (quickChecking == 1 || quickChecking == '1') {
+    myLog('【打卡模式】快捷打卡');
+    quick = quickChecking * 1 == 1
+    let checkingHour = checkingTime.split(':')[0]
+    let checkingMin = checkingTime.split(':')[1]
+    let currentHour = new Date().getHours()
+    let currentMin = new Date().getMinutes()
+    if (currentHour > checkingHour * 1) {
+      // 迟到或者下班卡
+      quick = false
+    } else if (currentMin <= checkingMin * 1 && quick) {
+      quick = true
+    } else {
+      // 迟到或者下班卡
+      quick = false
+    }
+  }
+
+  if (quick) {
+    check()
   }
   else {
-    // 切换到 工作台
-    stepClick('工作台')
-    // 切换到打卡页
-    stepClick('打卡')
+    myLog('【打卡模式】工作台打卡')
+
+    //切换到工作台
+    let isInWorkbench = openWorkbench();
+    if (!isInWorkbench) {
+      endAll(false);
+      return;
+    }
+    sleep(stepInterval);
+
+    //打开打卡页面
+    let isInSigninPage = openSigninInWorkbench();
+    if (!isInSigninPage) {
+      endAll(false);
+      return;
+    }
+    sleep(stepInterval);
+
+    signAction();
+
+    endAll();
   }
-
-  myLog("开始推送日志");
-  pushLogsToRemotes();
-  home();
-
-  hamibot.exit()
 }
 
-function stepClick(matchStr) {
+
+
+//打开工作台
+function openWorkbench() {
+  let matchStr = '工作台';
   myLog('【正在匹配】' + matchStr)
   sleep(stepInterval)
-  let step = text(matchStr).findOne(1000)
-  if (step) {
+  let isFind = text(matchStr).findOne(1000)
+  if (isFind) {
     myLog('匹配成功')
-    // let stepLeft = step.bounds().left + 15
-    // let stepTop = step.bounds().top + 10
-    // console.log(stepLeft, stepTop)
-    if (matchStr !== '打卡') {
-      // click(stepLeft, stepTop)
-      while (!click(matchStr));
+    let isClickSuc = tryToClickTimes(matchStr, 5);
+    if (isClickSuc) {
+      myLog('【进入控制台】成功');
+      return true;
     }
     else {
-      while (!click('打卡'));
-      sleep(stepInterval)
-      signAction()
+      myLog('【进入控制台】失败');
+      return false;
     }
   }
-  else if (matchStr == '打卡') {
-    myLog('滑动屏幕再次匹配')
-    let {
-      height,
-      width
-    } = device
-    let x = width / 2
-    let y1 = (height / 3) * 2
-    let y2 = height / 3
-    let swipeResult = swipe(x, y1, x + 5, y2, 500)
-    if (swipeResult) {
-      sleep(stepInterval / 2)
-      stepClick(matchStr)
+  else{
+    myLog('匹配失败，尝试回退')
+    back();
+    return openWorkbench();
+  }
+}
+
+//在工作台打开打卡页面
+function openSigninInWorkbench() {
+  let matchStr = '打卡';
+  myLog('【正在匹配】' + matchStr)
+  sleep(stepInterval)
+  let isFind = text(matchStr).findOne(1000)
+  if (isFind) {
+    myLog('匹配成功')
+    let isClickSuc = tryToClickTimes(matchStr, 5);
+    if (isClickSuc) {
+      myLog('【进入打卡页】成功');
+      return true;
+    }
+    else {
+      myLog('【进入打卡页】失败');
+      return false;
     }
   }
-  else {
-    myLog('匹配失败,后退再次匹配')
-    back()
-    sleep(stepInterval)
-    stepClick(matchStr)
+
+  sleep(stepInterval);
+
+  myLog('下滑屏幕再次匹配')
+  let {
+    height,
+    width
+  } = device
+  let x = width / 2
+  let y1 = (height / 3) * 2
+  let y2 = height / 3
+  let swipeResult = swipe(x, y1, x + 5, y2, 500)
+  if (swipeResult) {
+    sleep(stepInterval / 2)
+    return openSigninInWorkbench(matchStr)
   }
 }
 
@@ -167,6 +221,17 @@ function check() {
   } else {
     myLog('打卡失败!')
   }
+}
+
+function tryToClickTimes(text, times) {
+  for (var i = 1; i <= times; i++) {
+    myLog('尝试点击第' + i + '次...');
+    if (click(text)) {
+      return true;
+    }
+    sleep(stepInterval);
+  }
+  return false;
 }
 
 // 多端打印日志
@@ -246,4 +311,12 @@ function dateFormat(date, fmt) {
     if (new RegExp("(" + k + ")").test(fmt))
       fmt = fmt.replace(RegExp.$1, (RegExp.$1.length == 1) ? (o[k]) : (("00" + o[k]).substr(("" + o[k]).length)));
   return fmt;
+}
+
+function endAll(isSignInSuccess) {
+  myLog("开始推送日志");
+  pushLogsToRemotes();
+  home();
+
+  hamibot.exit()
 }
